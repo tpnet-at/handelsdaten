@@ -104,7 +104,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="dash-header">
     <div>
       <div class="dash-title"><i class="ti ti-chart-arrows-vertical"></i>Außenhandels-Dashboard</div>
-      <div class="dash-sub">Österreich · Statistik Austria · km462000</div>
+      <div class="dash-sub">Österreich · Statistik Austria · km462000 &nbsp;·&nbsp; <span style="color:#aaa">v1.4 · Stand: 09.07.2026</span></div>
     </div>
     <div class="header-right">
       <span class="dot" id="syncDot" title="Verbindungsstatus"></span>
@@ -151,7 +151,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="filter-bar">
       <label>Produkt:</label><select id="hKN" onchange="rH()"></select>
       <label>Land:</label><select id="hLand" onchange="rH()"></select>
-      <label>Kennzahl:</label><select id="hMet" onchange="rH()"><option value="STWERT">Handelswert (€)</option><option value="GEWICHT">Gewicht (kg)</option><option value="BOTH">Wert + Gewicht</option><option value="P-STWERT">Periodenwert (€)</option></select>
+      <label>Kennzahl:</label><select id="hMet" onchange="rH()"><option value="STWERT">Handelswert (€)</option><option value="GEWICHT">Gewicht (kg)</option><option value="BOTH">Wert + Gewicht</option><option value="P-STWERT">Periodenwert (€)</option><option value="PREIS">Preisindex (€/t)</option></select>
     </div>
     <div style="position:relative;width:100%;height:250px;margin-bottom:1.25rem"><canvas id="chartH" role="img" aria-label="Verlauf über Zeit"></canvas></div>
     <div id="histTable"></div>
@@ -254,6 +254,7 @@ function sT(t){
   if(t==='o')rO();if(t==='p')rP();if(t==='c')rC();if(t==='h')rH();if(t==='i'&&adm)rSM();
 }
 
+function fP(v){return Number(v).toLocaleString('de-AT',{maximumFractionDigits:0})+' €/t';}
 function rO(){
   const mk=gMk();
   if(!mk){document.getElementById('metrics').innerHTML='<p class="no-data">Keine Daten. Bitte im Tab Datenpflege eine XLS-Datei laden.</p>';return;}
@@ -261,12 +262,17 @@ function rO(){
   let eV=0,aV=0,eK=0,aK=0;
   sm.forEach(r=>{const v=String(r.V).trim();if(v==='1'){eV+=+r['M-STWERT']||0;eK+=+r['M-GEWICHT']||0;}if(v==='2'){aV+=+r['M-STWERT']||0;aK+=+r['M-GEWICHT']||0;}});
   const b=aV-eV;
+  // Preisindex €/t (Wert / Gewicht in Tonnen)
+  const pEin=eK>0?(eV/(eK/1000)):0;
+  const pAus=aK>0?(aV/(aK/1000)):0;
   document.getElementById('metrics').innerHTML=`
     <div class="metric"><div class="metric-label">Einfuhr Wert</div><div class="metric-val num">${fE(eV)}</div><div class="metric-sub">Monatswert</div></div>
     <div class="metric"><div class="metric-label">Ausfuhr Wert</div><div class="metric-val num">${fE(aV)}</div><div class="metric-sub">Monatswert</div></div>
     <div class="metric"><div class="metric-label">Handelsbilanz</div><div class="metric-val num ${b>=0?'pos':'neg'}">${fE(b)}</div><div class="metric-sub">${b>=0?'Überschuss':'Defizit'}</div></div>
     <div class="metric"><div class="metric-label">Einfuhr Gewicht</div><div class="metric-val num">${fK(eK)}</div><div class="metric-sub">Tonnen</div></div>
     <div class="metric"><div class="metric-label">Ausfuhr Gewicht</div><div class="metric-val num">${fK(aK)}</div><div class="metric-sub">Tonnen</div></div>
+    <div class="metric"><div class="metric-label">Preisindex Einfuhr</div><div class="metric-val num" style="font-size:16px">${fP(pEin)}</div><div class="metric-sub">Ø €/Tonne</div></div>
+    <div class="metric"><div class="metric-label">Preisindex Ausfuhr</div><div class="metric-val num" style="font-size:16px">${fP(pAus)}</div><div class="metric-sub">Ø €/Tonne</div></div>
     <div class="metric"><div class="metric-label">Produkte</div><div class="metric-val">${[...new Set(rs.map(r=>r.KN))].length}</div><div class="metric-sub">KN-Nummern</div></div>`;
   rCharts(mk);
 }
@@ -362,6 +368,14 @@ function rH(){
       {label:'Ausfuhr (kg)',data:au_k,borderColor:'#639922',backgroundColor:'rgba(99,153,34,.08)',tension:.3,pointRadius:4,borderDash:[4,3],fill:true}
     ];
     scales.y={ticks:{...tc,callback:v=>v.toLocaleString('de-AT')+' kg'},grid:gc};
+  } else if(mt==='PREIS'){
+    const pi_e=ms.map((_,i)=>ei_k[i]>0?Math.round(ei_v[i]/(ei_k[i]/1000)):0);
+    const pi_a=ms.map((_,i)=>au_k[i]>0?Math.round(au_v[i]/(au_k[i]/1000)):0);
+    datasets=[
+      {label:'Preisindex Einfuhr (€/t)',data:pi_e,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,.08)',tension:.3,pointRadius:4,fill:true},
+      {label:'Preisindex Ausfuhr (€/t)',data:pi_a,borderColor:'#639922',backgroundColor:'rgba(99,153,34,.08)',tension:.3,pointRadius:4,borderDash:[4,3],fill:true}
+    ];
+    scales.y={ticks:{...tc,callback:v=>v.toLocaleString('de-AT')+' €/t'},grid:gc};
   } else {
     // BOTH: Wert links, Gewicht rechts (zweite Y-Achse)
     datasets=[
@@ -375,13 +389,15 @@ function rH(){
   }
   cH=new Chart(document.getElementById('chartH'),{type:'line',data:{labels:ms,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:9,font:{size:11},color:'#888780'}}},scales}});
   // Tabelle
-  const showBoth=mt==='BOTH';
-  let t=`<table class="product-table"><thead><tr><th>Monat</th><th style="text-align:right">Einfuhr${showBoth?' (€)':''}</th><th style="text-align:right">Ausfuhr${showBoth?' (€)':''}</th><th style="text-align:right">Saldo${showBoth?' (€)':''}</th>${showBoth?'<th style="text-align:right">Einf. (kg)</th><th style="text-align:right">Ausf. (kg)</th>':''}</tr></thead><tbody>`;
+  const showBoth=mt==='BOTH', showPreis=mt==='PREIS';
+  const pi_e=showPreis?ms.map((_,i)=>ei_k[i]>0?Math.round(ei_v[i]/(ei_k[i]/1000)):0):[];
+  const pi_a=showPreis?ms.map((_,i)=>au_k[i]>0?Math.round(au_v[i]/(au_k[i]/1000)):0):[];
+  let t=`<table class="product-table"><thead><tr><th>Monat</th><th style="text-align:right">${showPreis?'Preisindex Einfuhr':'Einfuhr'}${showBoth?' (€)':showPreis?' (€/t)':''}</th><th style="text-align:right">${showPreis?'Preisindex Ausfuhr':'Ausfuhr'}${showBoth?' (€)':showPreis?' (€/t)':''}</th>${showPreis?'':'<th style="text-align:right">Saldo'+( showBoth?' (€)':'')+' </th>'}${showBoth?'<th style="text-align:right">Einf. (kg)</th><th style="text-align:right">Ausf. (kg)</th>':''}</tr></thead><tbody>`;
   ms.forEach((m,i)=>{
-    const dEi=mt==='GEWICHT'?ei_k[i]:(mt==='P-STWERT'?ms.map(m=>{const r=findR(m,'1');return r?Math.round(+r['P-STWERT']||0):0;})[i]:ei_v[i]);
-    const dAu=mt==='GEWICHT'?au_k[i]:(mt==='P-STWERT'?ms.map(m=>{const r=findR(m,'2');return r?Math.round(+r['P-STWERT']||0):0;})[i]:au_v[i]);
+    const dEi=showPreis?pi_e[i]:mt==='GEWICHT'?ei_k[i]:(mt==='P-STWERT'?ms.map(m=>{const r=findR(m,'1');return r?Math.round(+r['P-STWERT']||0):0;})[i]:ei_v[i]);
+    const dAu=showPreis?pi_a[i]:mt==='GEWICHT'?au_k[i]:(mt==='P-STWERT'?ms.map(m=>{const r=findR(m,'2');return r?Math.round(+r['P-STWERT']||0):0;})[i]:au_v[i]);
     const s=dAu-dEi;
-    t+=`<tr><td>${m}</td><td class="num" style="text-align:right">${fN(dEi)}</td><td class="num" style="text-align:right">${fN(dAu)}</td><td class="num" style="text-align:right;color:${s>=0?'#3B6D11':'#A32D2D'}">${fN(s)}</td>${showBoth?`<td class="num" style="text-align:right">${fN(ei_k[i])}</td><td class="num" style="text-align:right">${fN(au_k[i])}</td>`:''}</tr>`;
+    t+=`<tr><td>${m}</td><td class="num" style="text-align:right">${fN(dEi)}</td><td class="num" style="text-align:right">${fN(dAu)}</td>${showPreis?'':`<td class="num" style="text-align:right;color:${s>=0?'#3B6D11':'#A32D2D'}">${fN(s)}</td>`}${showBoth?`<td class="num" style="text-align:right">${fN(ei_k[i])}</td><td class="num" style="text-align:right">${fN(au_k[i])}</td>`:''}</tr>`;
   });
   document.getElementById('histTable').innerHTML=ms.length>1?t+'</tbody></table>':'<p class="no-data">Noch zu wenige Monate für einen Verlauf.</p>';
 }
